@@ -131,7 +131,7 @@ class CockroachGrammar extends Grammar
         // columns and convert it to a parameter value. Then we will concatenate a
         // list of the columns that can be added into this update query clauses.
         return collect($values)->map(function ($value, $key) {
-            return $this->wrap($key).' = '.$this->parameter($value);
+            return $this->wrap(end(explode('.', $key))).' = '.$this->parameter($value);
         })->implode(', ');
     }
 
