@@ -2,9 +2,9 @@
 
 namespace Nbj\Cockroach\Grammar\Schema;
 
-use Illuminate\Support\Fluent;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\Grammars\Grammar;
+use Illuminate\Support\Fluent;
 
 class CockroachGrammar extends Grammar
 {
@@ -30,20 +30,16 @@ class CockroachGrammar extends Grammar
     protected $serials = ['bigInteger', 'integer', 'mediumInteger', 'smallInteger', 'tinyInteger'];
 
     /**
-     * Holds all the primary key fields
-     *
-     * @var array
-     */
-    protected $primaryKeyFields = [];
-
-    /**
      * Gets the primary key string for table creation
      *
+     * @param Blueprint $blueprint
      * @return string|null
      */
-    protected function getPrimaryKeyFields()
+    protected function getPrimaryKeyFields(Blueprint $blueprint)
     {
-        $columns = collect($this->primaryKeyFields);
+        $columns = collect($blueprint->getAddedColumns())->filter(function ($column) {
+            return ((in_array($column->type, $this->serials) || ($column->generatedAs !== null)) && $column->autoIncrement);
+        });
 
         // Return null if no column is set as primary key
         if ($columns->count() == 0) {
@@ -94,7 +90,7 @@ class CockroachGrammar extends Grammar
             $blueprint->temporary ? 'create temporary' : 'create',
             $this->wrapTable($blueprint),
             implode(', ', $this->getColumns($blueprint)),
-            $this->getPrimaryKeyFields()
+            $this->getPrimaryKeyFields($blueprint)
         );
     }
 
@@ -161,6 +157,33 @@ class CockroachGrammar extends Grammar
     }
 
     /**
+     * Compile a foreign key command.
+     *
+     * @param  \Illuminate\Database\Schema\Blueprint  $blueprint
+     * @param  \Illuminate\Support\Fluent  $command
+     * @return string
+     * @note: Any columns added must be listed first in the Blueprint, otherwise the foreign constraint fails strangly.
+     */
+    public function compileForeign(Blueprint $blueprint, Fluent $command)
+    {
+        $sql = parent::compileForeign($blueprint, $command);
+
+        if (! is_null($command->deferrable)) {
+            $sql .= $command->deferrable ? ' deferrable' : ' not deferrable';
+        }
+
+        if ($command->deferrable && ! is_null($command->initiallyImmediate)) {
+            $sql .= $command->initiallyImmediate ? ' initially immediate' : ' initially deferred';
+        }
+
+        if (! is_null($command->notValid)) {
+            $sql .= ' not valid';
+        }
+
+        return $sql;
+    }
+
+    /**
      * Compile a drop table command.
      *
      * @param  \Illuminate\Database\Schema\Blueprint  $blueprint
@@ -173,9 +196,21 @@ class CockroachGrammar extends Grammar
     }
 
     /**
+     * Compile a drop table (if exists) command.
+     *
+     * @param  \Illuminate\Database\Schema\Blueprint  $blueprint
+     * @param  \Illuminate\Support\Fluent  $command
+     * @return string
+     */
+    public function compileDropIfExists(Blueprint $blueprint, Fluent $command)
+    {
+        return 'drop table if exists '.$this->wrapTable($blueprint);
+    }
+
+    /**
      * Compile the SQL needed to drop all tables.
      *
-     * @param  string  $tables
+     * @param  array  $tables
      * @return string
      */
     public function compileDropAllTables($tables)
@@ -186,24 +221,12 @@ class CockroachGrammar extends Grammar
     /**
      * Compile the SQL needed to retrieve all table names.
      *
-     * @param  string  $schema
+     * @param  string|array  $schema
      * @return string
      */
     public function compileGetAllTables($schema)
     {
-        return "select tablename from pg_catalog.pg_tables where schemaname = '{$schema}'";
-    }
-
-    /**
-     * Compile a drop table (if exists) command.
-     *
-     * @param  \Illuminate\Database\Schema\Blueprint  $blueprint
-     * @param  \Illuminate\Support\Fluent  $command
-     * @return string
-     */
-    public function compileDropIfExists(Blueprint $blueprint, Fluent $command)
-    {
-        return 'drop table if exists '.$this->wrapTable($blueprint);
+        return "select tablename from pg_catalog.pg_tables where schemaname in ('".implode("','", (array) $schema)."')";
     }
 
     /**
@@ -332,6 +355,17 @@ class CockroachGrammar extends Grammar
     }
 
     /**
+     * Create the column definition for a tiny text type.
+     *
+     * @param  \Illuminate\Support\Fluent  $column
+     * @return string
+     */
+    protected function typeTinyText(Fluent $column)
+    {
+        return 'varchar(255)';
+    }
+
+    /**
      * Create the column definition for a text type.
      *
      * @param  \Illuminate\Support\Fluent  $column
@@ -372,7 +406,7 @@ class CockroachGrammar extends Grammar
      */
     protected function typeInteger(Fluent $column)
     {
-        return $column->autoIncrement ? 'serial' : 'integer';
+        return $this->generatableColumn('integer', $column);
     }
 
     /**
@@ -383,7 +417,7 @@ class CockroachGrammar extends Grammar
      */
     protected function typeBigInteger(Fluent $column)
     {
-        return $column->autoIncrement ? 'bigserial' : 'bigint';
+        return $this->generatableColumn('bigint', $column);
     }
 
     /**
@@ -394,7 +428,7 @@ class CockroachGrammar extends Grammar
      */
     protected function typeMediumInteger(Fluent $column)
     {
-        return $column->autoIncrement ? 'serial' : 'integer';
+        return $this->generatableColumn('integer', $column);
     }
 
     /**
@@ -405,7 +439,7 @@ class CockroachGrammar extends Grammar
      */
     protected function typeTinyInteger(Fluent $column)
     {
-        return $column->autoIncrement ? 'smallserial' : 'smallint';
+        return $this->generatableColumn('smallint', $column);
     }
 
     /**
@@ -416,7 +450,42 @@ class CockroachGrammar extends Grammar
      */
     protected function typeSmallInteger(Fluent $column)
     {
-        return $column->autoIncrement ? 'smallserial' : 'smallint';
+        return $this->generatableColumn('smallint', $column);
+    }
+
+    /**
+     * Create the column definition for a generatable column.
+     *
+     * @param  string  $type
+     * @param  \Illuminate\Support\Fluent  $column
+     * @return string
+     */
+    protected function generatableColumn($type, Fluent $column)
+    {
+        if (! $column->autoIncrement && is_null($column->generatedAs)) {
+            return $type;
+        }
+
+        if ($column->autoIncrement && is_null($column->generatedAs)) {
+            return with([
+                'integer' => 'serial',
+                'bigint' => 'bigserial',
+                'smallint' => 'smallserial',
+            ])[$type];
+        }
+
+        $options = '';
+
+        if (! is_bool($column->generatedAs) && ! empty($column->generatedAs)) {
+            $options = sprintf(' (%s)', $column->generatedAs);
+        }
+
+        return sprintf(
+            '%s generated %s as identity%s',
+            $type,
+            $column->always ? 'always' : 'by default',
+            $options
+        );
     }
 
     /**
@@ -475,18 +544,18 @@ class CockroachGrammar extends Grammar
     }
 
     /**
-     * Create the column definition for an enum type.
+     * Create the column definition for an enumeration type.
      *
      * @param  \Illuminate\Support\Fluent  $column
      * @return string
      */
     protected function typeEnum(Fluent $column)
     {
-        $allowed = array_map(function ($a) {
-            return "'{$a}'";
-        }, $column->allowed);
-
-        return "varchar(255) check (\"{$column->name}\" in (".implode(', ', $allowed).'))';
+        return sprintf(
+            'varchar(255) check ("%s" in (%s))',
+            $column->name,
+            $this->quoteString($column->allowed)
+        );
     }
 
     /**
@@ -534,7 +603,7 @@ class CockroachGrammar extends Grammar
     }
 
     /**
-     * Create the column definition for a date-time type.
+     * Create the column definition for a date-time (with time zone) type.
      *
      * @param  \Illuminate\Support\Fluent  $column
      * @return string
@@ -556,7 +625,7 @@ class CockroachGrammar extends Grammar
     }
 
     /**
-     * Create the column definition for a time type.
+     * Create the column definition for a time (with time zone) type.
      *
      * @param  \Illuminate\Support\Fluent  $column
      * @return string
@@ -574,26 +643,22 @@ class CockroachGrammar extends Grammar
      */
     protected function typeTimestamp(Fluent $column)
     {
-        if ($column->useCurrent) {
-            return 'timestamp without time zone default CURRENT_timestamp';
-        }
+        $columnType = 'timestamp without time zone';
 
-        return 'timestamp without time zone';
+        return $column->useCurrent ? "$columnType default CURRENT_TIMESTAMP" : $columnType;
     }
 
     /**
-     * Create the column definition for a timestamp type.
+     * Create the column definition for a timestamp (with time zone) type.
      *
      * @param  \Illuminate\Support\Fluent  $column
      * @return string
      */
     protected function typeTimestampTz(Fluent $column)
     {
-        if ($column->useCurrent) {
-            return 'timestamp with time zone default CURRENT_timestamp';
-        }
+        $columnType = 'timestamp with time zone';
 
-        return 'timestamp with time zone';
+        return $column->useCurrent ? "$columnType default CURRENT_TIMESTAMP" : $columnType;
     }
 
     /**
@@ -663,42 +728,6 @@ class CockroachGrammar extends Grammar
     {
         if (! is_null($column->default)) {
             return ' default '.$this->getDefaultValue($column->default);
-        }
-    }
-
-    /**
-     * Get the SQL for an auto-increment column modifier.
-     *
-     * @param  \Illuminate\Database\Schema\Blueprint  $blueprint
-     * @param  \Illuminate\Support\Fluent  $column
-     * @return string|null
-     */
-    protected function modifyIncrement(Blueprint $blueprint, Fluent $column)
-    {
-        if (in_array($column->type, $this->serials) && $column->autoIncrement) {
-            $this->primaryKeyFields[] = $column;
-        }
-    }
-
-    /**
-     * Get the SQL for an primary key column modifier.
-     *
-     * @param  \Illuminate\Database\Schema\Blueprint  $blueprint
-     * @param  \Illuminate\Support\Fluent  $column
-     * @return null
-     */
-    protected function modifyPrimary(Blueprint $blueprint, Fluent $column)
-    {
-        $primaryCommand = collect($blueprint->getCommands())->first(function ($command) {
-            return $command->name == 'primary';
-        });
-
-        if (!$primaryCommand) {
-            return null;
-        }
-
-        if (in_array($column->type, $this->serials) && in_array($column->name, $primaryCommand->columns)) {
-            $this->primaryKeyFields[] = $column;
         }
     }
 }
