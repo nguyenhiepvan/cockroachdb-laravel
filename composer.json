@@ -1,5 +1,5 @@
 {
-    "name": "nbj/cockroachdb-laravel",
+    "name": "leenooks/cockroachdb-laravel",
     "description": "CockroachDB driver for Laravel 8",
     "keywords": ["cockroach", "cockroachdb", "laravel"],
     "type": "package",
@@ -8,6 +8,10 @@
         {
             "name": "Nikolaj Boel Jensen",
             "email": "nbj@cego.dk"
+        },
+        {
+            "name": "Deon George",
+            "email": "deon@leenooks.net"
         }
     ],
     "autoload": {
