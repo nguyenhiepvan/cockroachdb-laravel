@@ -13,10 +13,9 @@ class CockroachServiceProvider extends ServiceProvider
 
     public function register()
     {
-        Connection::resolverFor('cockroach', function ($connection, $database, $prefix, $config) {
-            $connector = new CockroachConnector();
-            $connection = $connector->connect($config);
+        $this->app->bind('db.connector.cockroach',function() { return new CockroachConnector; });
 
+        Connection::resolverFor('cockroach', function ($connection, $database, $prefix, $config) {
             return new CockroachConnection($connection, $database, $prefix, $config);
         });
     }
