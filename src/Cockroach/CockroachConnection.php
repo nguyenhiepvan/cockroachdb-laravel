@@ -52,7 +52,7 @@ class CockroachConnection extends Connection
      */
     protected function getDefaultPostProcessor()
     {
-        return new CockroachProcessor();
+        return new CockroachProcessor;
     }
 
     /**
