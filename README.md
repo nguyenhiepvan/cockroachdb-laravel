@@ -23,23 +23,23 @@ Open `config/datbase.php` and, to your "connections" array, add:
 
 ```php
 'cockroach' => [
-    'driver' => 'cockroach',
-    'host' => env('DB_HOST', 'HOSTNAME-OF-COCKROACH-SERVER'),
-    'port' => env('DB_PORT', '26257'),
-    'database' => env('DB_DATABASE', 'DATABASE-NAME'),
-    'username' => env('DB_USERNAME', 'root'),
-    'password' => env('DB_PASSWORD', ''),
-    'charset' => 'utf8',
-    'prefix' => '',
-    'schema' => 'DATABASE-NAME',
-    'sslmode' => 'prefer',
-    
-    // Only set these keys if you want to run en secure mode
-    // otherwise you can them out of the configuration array
-    'sslcert' => env('DB_SSLCERT', 'client.crt'),
-    'sslkey' => env('DB_SSLKEY', 'client.key'),
-    'sslrootcert' => env('DB_SSLROOTCERT', 'ca.crt'),
-],
+            'driver'      => 'cockroach',
+            'host'        => env('DB_HOST', '127.0.0.1'),
+            'port'        => env('DB_PORT', '26257'),
+            'database'    => env('DB_DATABASE', 'forge'),
+            'username'    => env('DB_USERNAME', 'forge'),
+            'password'    => env('DB_PASSWORD', ''),
+            'charset'     => 'utf8',
+            'prefix'      => '',
+            'schema'      => 'public',
+            'sslmode'     => 'prefer',
+
+            // Only set these keys if you want to run en secure mode
+            // otherwise you can them out of the configuration array
+            'sslcert'     => env('DB_SSLCERT', 'client.crt'),
+            'sslkey'      => env('DB_SSLKEY', 'client.key'),
+            'sslrootcert' => env('DB_SSLROOTCERT', 'ca.crt'),
+        ],
 ```
 
 Make sure to update **host**, **port**, **database**, **username**, **password** and **schema** to
