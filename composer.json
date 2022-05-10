@@ -1,5 +1,5 @@
 {
-    "name": "leenooks/cockroachdb-laravel",
+    "name": "nguyenhiep/cockroachdb-laravel",
     "description": "CockroachDB driver for Laravel 8",
     "keywords": ["cockroach", "cockroachdb", "laravel"],
     "type": "package",
