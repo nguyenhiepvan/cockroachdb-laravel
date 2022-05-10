@@ -6,7 +6,7 @@ CockroachDB database driver for Laravel 8
 ### Step 1: Install Through Composer
 
 ```
-composer require nbj/cockroachdb-laravel
+composer require nguyenhiep/cockroachdb-laravel
 ```
 
 ### Step 2: Add the Service Provider (This happens automatically in Laravel 5.5) 
